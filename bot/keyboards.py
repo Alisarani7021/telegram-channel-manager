@@ -17,6 +17,7 @@ def main_menu() -> InlineKeyboardMarkup:
          InlineKeyboardButton("📊 محدودیت و آمار", callback_data="m:stats")],
         [InlineKeyboardButton("🔑 کلیدهای AI", callback_data="m:keys"),
          InlineKeyboardButton("🔔 اعلان‌ها", callback_data="m:annc")],
+        [InlineKeyboardButton("🌌 آزمایشگاه ۵۱", callback_data="m:lab")],
         [InlineKeyboardButton("❓ بلد نیستم چیکار کنم؟", callback_data="ob:0")],
     ]
     return InlineKeyboardMarkup(rows)
@@ -103,7 +104,7 @@ def pub_menu(s: dict, publish_mode: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(f"⏱️ فاصله ارسال: {s['send_interval_min']} دقیقه", callback_data="edit:interval")],
         [InlineKeyboardButton(f"📅 ساعت کاری: {s['work_start']}:00 تا {s['work_end']}:00", callback_data="edit:workhours")],
-        [InlineKeyboardButton(f"📝 نوع محتوا: {'کوتاه' if s['content_style']=='short' else 'متعادل'}", callback_data="st:style")],
+        [InlineKeyboardButton(f"📝 نوع محتوا: {'کوتاه ⚡' if s['content_style']=='short' else ('کوانتومی 🕳️' if s['content_style']=='quantum' else 'متعادل 📝')}", callback_data="st:style")],
         [InlineKeyboardButton(f"🔀 مدل انتشار: {'🔍 بررسی' if publish_mode=='review' else '⚡ آنی'}", callback_data="st:pubmode")],
         [InlineKeyboardButton("🗑️ ریست زمان‌بندی (خالی‌کردن صف)", callback_data="st:clearq")],
         [InlineKeyboardButton("⬅️ بازگشت", callback_data="m:menu")],
@@ -225,4 +226,48 @@ def admin_menu() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("🗝️ مدیریت استخر کلیدها", callback_data="key:pool")],
         [InlineKeyboardButton("📈 آمار کلی", callback_data="ad:stats")],
         [InlineKeyboardButton("⬅️ بازگشت", callback_data="m:menu")],
+    ])
+
+
+# ---- area 51 lab ----
+def lab_menu(style: str, persona_fa: str, idea_on: bool) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"🕳️ فشرده‌ساز کوانتومی: {'✅' if style == 'quantum' else '❌'}",
+                              callback_data="lab:quantum")],
+        [InlineKeyboardButton(f"💀 نویسنده مهمان: {persona_fa}", callback_data="lab:persona")],
+        [InlineKeyboardButton("🔮 دزد آینده", callback_data="lab:trend"),
+         InlineKeyboardButton("👁️ نبض جهان", callback_data="lab:pulse")],
+        [InlineKeyboardButton("🌪️ باران ایده", callback_data="lab:rain"),
+         InlineKeyboardButton(f"✨ ماشین ایده‌ساز: {'✅' if idea_on else '❌'}",
+                              callback_data="lab:idea")],
+        [InlineKeyboardButton("♾️ خاطره ابدی", callback_data="lab:memory")],
+        [InlineKeyboardButton("🧬 استخراج DNA", callback_data="lab:dnaout"),
+         InlineKeyboardButton("🧬 تزریق DNA", callback_data="lab:dnain")],
+        [InlineKeyboardButton("🎛️ کنسول خدایی", callback_data="lab:god")],
+        [InlineKeyboardButton("⬅️ بازگشت", callback_data="m:menu")],
+    ])
+
+
+def god_menu(style: str, per_cycle: int, interval: int) -> InlineKeyboardMarkup:
+    tones = {"short": "کوتاه ⚡", "medium": "متعادل 📝", "quantum": "کوانتومی 🕳️"}
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"🔥 کنجکاوی (خبر در هر دوره): {per_cycle}",
+                              callback_data="lab:godcur")],
+        [InlineKeyboardButton(f"😴 آرامش (فاصله ارسال): هر {interval} دقیقه",
+                              callback_data="lab:godcalm")],
+        [InlineKeyboardButton(f"🎭 لحن کانال: {tones.get(style, style)}",
+                              callback_data="lab:godtone")],
+        [InlineKeyboardButton("⬅️ بازگشت", callback_data="m:lab")],
+    ])
+
+
+def back_to_lab() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ بازگشت به آزمایشگاه",
+                                                       callback_data="m:lab")]])
+
+
+def mem_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📤 بازنشر در کانال", callback_data="lab:resend")],
+        [InlineKeyboardButton("⬅️ بازگشت", callback_data="m:lab")],
     ])

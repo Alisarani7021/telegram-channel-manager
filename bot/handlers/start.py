@@ -7,10 +7,11 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Cont
 
 from .. import database as db
 from ..keyboards import (auto_menu, back_to_menu, conn_menu, help_list, help_nav,
-                         keys_menu, main_menu, onboarding_nav, panel_menu, pub_menu,
+                         keys_menu, lab_menu, main_menu, onboarding_nav, panel_menu, pub_menu,
                          style_menu)
 from ..texts import HELP_TOPICS, MENU_STATUS, ONBOARDING, START_TEXT
 from ..services import ai_router
+from ..services import lab as lab_svc
 
 
 def _cfg(context: ContextTypes.DEFAULT_TYPE):
@@ -106,6 +107,12 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         text = "🔔 <b>اعلان‌ها</b>\n\n" + ("\n\n---\n\n".join(x["text"] for x in items) if items else "فعلاً اعلانی نیست.")
         await q.edit_message_text(text[:3500], parse_mode=ParseMode.HTML,
                                   reply_markup=back_to_menu())
+    elif action == "lab":
+        lab = lab_svc.get_lab(s)
+        await q.edit_message_text(lab_svc.LAB_TEXT, parse_mode=ParseMode.HTML,
+                                  reply_markup=lab_menu(s["content_style"],
+                                                        lab_svc.PERSONAS[lab["persona"]]["fa"],
+                                                        bool(lab.get("idea_enabled"))))
     elif action == "help":
         await show_help(update, context, 0)
 

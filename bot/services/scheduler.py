@@ -10,7 +10,9 @@ from telegram.constants import ParseMode
 
 from .. import database as db
 from ..keyboards import review_kb
-from . import ai_router, cleaner, news as news_svc, price as price_svc, publisher, rumor
+from . import ai_router, cleaner
+from . import lab as lab_svc
+from . import news as news_svc, price as price_svc, publisher, rumor
 
 
 def _tz(cfg) -> ZoneInfo:
@@ -292,6 +294,40 @@ async def news_tick(bot, tm, db_path: str, cfg) -> None:
             done += 1
 
 
+# ---------- idea machine tick (hourly check) ----------
+async def idea_tick(bot, tm, db_path: str, cfg) -> None:
+    tz = _tz(cfg)
+    now_hour = datetime.now(tz).hour
+    for user in await db.all_users(db_path):
+        if user.get("paused"):
+            continue
+        s = await db.get_settings(db_path, user["user_id"])
+        lab = lab_svc.get_lab(s)
+        if not lab.get("idea_enabled") or int(lab.get("idea_hour", 12)) != now_hour:
+            continue
+        if await db.today_ai_usage(db_path, user["user_id"]) >= cfg.daily_post_limit:
+            continue
+        if not await db.list_dests(db_path, user["user_id"]):
+            continue
+        try:
+            msg = await lab_svc.daily_idea(db_path, user["user_id"], cfg.ai_order)
+        except Exception:
+            continue
+        await db.bump_stat(db_path, user["user_id"], "ai_calls")
+        qid = await db.enqueue(db_path, user["user_id"], "idea-machine", [], "text",
+                               msg, msg, "queued", kind="idea")
+        item = await db.get_queue_item(db_path, qid)
+        try:
+            ok, detail = await publisher.publish_item(bot, tm, db_path, cfg, item,
+                                                      cfg.ai_order)
+            m = await bot.send_message(user["user_id"],
+                                       f"{'✨ ایده امروز منتشر شد' if ok else '❌ ' + detail}")
+            await db.log_notif(db_path, user["user_id"], user["user_id"], m.message_id,
+                               "report")
+        except Exception:
+            pass
+
+
 # ---------- nightly cleanup + daily report ----------
 async def nightly(bot, db_path: str, cfg) -> None:
     tz = _tz(cfg)
@@ -375,6 +411,9 @@ def register(sched, bot, tm, db_path: str, cfg) -> None:
     async def _news():
         await news_tick(bot, tm, db_path, cfg)
 
+    async def _idea():
+        await idea_tick(bot, tm, db_path, cfg)
+
     async def _nightly():
         await nightly(bot, db_path, cfg)
 
@@ -388,6 +427,7 @@ def register(sched, bot, tm, db_path: str, cfg) -> None:
     sched.add_job(_price, "cron", minute=5, id="price", max_instances=1, coalesce=True)
     sched.add_job(_news, "interval", minutes=cfg.news_tick_min, id="news",
                   max_instances=1, coalesce=True)
+    sched.add_job(_idea, "cron", minute=35, id="idea", max_instances=1, coalesce=True)
     sched.add_job(_nightly, "cron", hour=0, minute=0, id="nightly",
                   max_instances=1, coalesce=True)
     sched.add_job(_keys, "interval", hours=6, id="keys", max_instances=1, coalesce=True)

@@ -13,6 +13,7 @@ from .config import Settings
 from .handlers import admin as h_admin
 from .handlers import connection as h_conn
 from .handlers import keys as h_keys
+from .handlers import lab as h_lab
 from .handlers import review as h_review
 from .handlers import settings as h_settings
 from .handlers import start as h_start
@@ -55,6 +56,7 @@ async def main() -> None:
     h_conn.register(app)
     h_settings.register(app)
     h_keys.register(app)
+    h_lab.register(app)
     h_review.register(app)
     h_admin.register(app)
 

@@ -5,6 +5,7 @@ import json
 import re
 
 from . import ai_router
+from .lab import PERSONAS, get_lab
 
 ALLOWED_TAGS = "b, i, u, s, code, pre, a, blockquote"
 
@@ -36,6 +37,8 @@ async def clean_post(db_path: str, raw_text: str, has_media: bool, settings: dic
     custom_rule = (settings.get("custom_rule") or "").strip()
     topic = (settings.get("channel_topic") or "").strip()
     style = settings.get("content_style", "medium")
+    persona_line = PERSONAS.get(get_lab(settings).get("persona") or "none", {}).get("line", "")
+    persona_rule = f"8b. {persona_line}" if persona_line else ""
     premium_mode = settings.get("premium_mode", "normal")
     text_filters: list[str] = []
     try:
@@ -47,8 +50,13 @@ async def clean_post(db_path: str, raw_text: str, has_media: bool, settings: dic
                     "no_political": "سیاست جنجالی"}.items()
     active_filters = [v for k, v in filter_lines if k in text_filters]
 
-    style_line = ("Keep it complete and balanced (do not shorten aggressively)."
-                  if style != "short" else "Make it SHORT and punchy (max ~500 chars).")
+    if style == "quantum":
+        style_line = ("QUANTUM MODE: compress to the absolute essence — "
+                      "one bold headline + max 3 ultra-short bullets. Drop everything else.")
+    elif style == "short":
+        style_line = "Make it SHORT and punchy (max ~500 chars)."
+    else:
+        style_line = "Keep it complete and balanced (do not shorten aggressively)."
     emoji_line = {"normal": "Keep normal emojis as-is; drop premium/custom ones.",
                   "premium": "Keep ALL emojis exactly as in the original.",
                   "ai": "Add/replace with fitting STANDARD emojis for the topic."}[premium_mode]
@@ -69,6 +77,7 @@ Rules:
 6. Emojis: {emoji_line}
 7. Topic of destination channel: {topic or 'general'}. If the post is COMPLETELY unrelated or contradicts it, REJECT.
 8. {"Extra custom rule from channel owner (MUST obey): " + custom_rule if custom_rule else "No custom rule."}
+{persona_rule}
 9. {"Reject if it contains: " + ", ".join(active_filters) if active_filters else "No text filters."}
 10. Never invent facts. Never add new claims.
 
@@ -122,7 +131,7 @@ Rules:
 - Language: fluent Persian. Keep facts/numbers/quotes accurate, never invent.
 - Destination topic: {topic or 'general'} — if completely unrelated, REJECT.
 - Telegram HTML only ({ALLOWED_TAGS}). Start with a bold headline.
-- Length: {'short (~500 chars)' if style == 'short' else 'complete but tight'}.
+- Length: {'QUANTUM essence: bold headline + max 3 bullets' if style == 'quantum' else ('short (~500 chars)' if style == 'short' else 'complete but tight')}.
 Respond JSON only: {{"action": "publish or reject", "cleaned_html": "HTML", "reason": "short Persian reason"}}"""
     out = await ai_router.chat(db_path, [{"role": "user", "content": prompt}],
                                max_tokens=2500, temperature=0.4, order=order)

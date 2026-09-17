@@ -35,7 +35,8 @@ CREATE TABLE IF NOT EXISTS settings(
   text_filters TEXT NOT NULL DEFAULT '[]',
   rumor_enabled INTEGER NOT NULL DEFAULT 0,
   rumor_action TEXT NOT NULL DEFAULT 'reject',
-  survey_mode INTEGER NOT NULL DEFAULT 0
+  survey_mode INTEGER NOT NULL DEFAULT 0,
+  lab TEXT NOT NULL DEFAULT '{}'
 );
 CREATE TABLE IF NOT EXISTS sources(
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -153,6 +154,11 @@ async def init_db(db_path: str) -> None:
     Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     async with aiosqlite.connect(db_path) as db:
         await db.executescript(SCHEMA)
+        # lightweight migrations for old DBs
+        cur = await db.execute("PRAGMA table_info(settings)")
+        cols = {r[1] for r in await cur.fetchall()}
+        if "lab" not in cols:
+            await db.execute("ALTER TABLE settings ADD COLUMN lab TEXT NOT NULL DEFAULT '{}'")
         await db.commit()
 
 
@@ -202,7 +208,7 @@ DEFAULT_SETTINGS = {
     "signature_mode": "none", "signature_text": "", "signature_url": "", "signature_word": "",
     "premium_mode": "normal", "translate_enabled": 1, "dedup_enabled": 1, "custom_rule": "",
     "channel_topic": "", "type_filters": "[]", "text_filters": "[]",
-    "rumor_enabled": 0, "rumor_action": "reject", "survey_mode": 0,
+    "rumor_enabled": 0, "rumor_action": "reject", "survey_mode": 0, "lab": "{}",
 }
 
 
@@ -497,6 +503,15 @@ async def recent_published(db_path: str, user_id: int, limit: int = 15) -> list[
 
 
 # ---------- price / news cfg ----------
+async def get_random_excerpt(db_path: str, user_id: int) -> dict | None:
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        cur = await db.execute("SELECT * FROM published WHERE user_id=? ORDER BY RANDOM() LIMIT 1",
+                               (user_id,))
+        row = await cur.fetchone()
+        return dict(row) if row else None
+
+
 async def get_price_cfg(db_path: str, user_id: int) -> dict:
     await ensure_user(db_path, user_id)
     async with aiosqlite.connect(db_path) as db:
