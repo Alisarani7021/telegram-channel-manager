@@ -137,8 +137,19 @@ async def dk_key(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     provider = context.user_data["dk"]["provider"]
     default_model = ai_router.PROVIDERS[provider]["model"]
     if provider == "custom":
-        await update.message.reply_text("🤖 اسم دقیق مدل رو بفرست:\nمثال: <code>llama-3.3-70b-versatile</code>",
-                                        parse_mode=ParseMode.HTML, reply_markup=cancel_conv())
+        wait = await update.message.reply_text("⏳ دارم مدل‌های این سرور رو پیدا می‌کنم...")
+        models = await ai_router.list_models_openai(context.user_data["dk"]["url"], key)
+        if models:
+            sugg = ai_router.pick_model(models)
+            context.user_data["dk"]["suggestion"] = sugg
+            shown = "\n".join("• <code>" + m + "</code>" for m in models[:10])
+            await wait.edit_text(
+                f"🤖 این مدل‌ها روی سرور پیدا شد:\n{shown}\n\nپیشنهاد: <code>{sugg}</code>\n"
+                "اسم مدل رو بفرست، یا برای پیشنهاد <code>ok</code> بفرست:",
+                parse_mode=ParseMode.HTML, reply_markup=cancel_conv())
+        else:
+            await wait.edit_text("🤖 اسم دقیق مدل رو بفرست (نتونستم لیست مدل‌ها رو بگیرم):\nمثال: <code>MiniMax-M2</code>",
+                                 parse_mode=ParseMode.HTML, reply_markup=cancel_conv())
     else:
         await update.message.reply_text(
             f"🤖 مدل رو بفرست یا برای پیش‌فرض (<code>{default_model}</code>) کلمه <code>ok</code> رو بفرست:",
@@ -159,7 +170,7 @@ async def dk_model(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     default_model = ai_router.PROVIDERS[provider]["model"]
     model = update.message.text.strip()
     if model.lower() == "ok":
-        model = default_model
+        model = context.user_data.get("dk", {}).get("suggestion") or default_model
     if not model:
         await update.message.reply_text("❌ مدل خالیه! دوباره بفرست:")
         return DK_MODEL
@@ -168,7 +179,7 @@ async def dk_model(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                                         reply_markup=back_to_menu())
         return ConversationHandler.END
     wait = await update.message.reply_text("⏳ دارم کلید رو تست می‌کنم...")
-    ok, detail, ms = await ai_router.test_key(provider, dk.get("url", ""), dk["key"], model)
+    ok, detail, ms, _code = await ai_router.test_key(provider, dk.get("url", ""), dk["key"], model)
     if not ok:
         await wait.edit_text(f"❌ کلید قبول نشد!\n\n{detail}\n\nدوباره با /start ← کلیدهای AI تلاش کن.")
         return ConversationHandler.END

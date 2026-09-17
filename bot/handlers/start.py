@@ -1,4 +1,4 @@
-""" /start, main menu, help carousel, samples, stats, announcements. """
+""" /start, main menu, help carousel, stats, announcements. """
 from __future__ import annotations
 
 from telegram import Update
@@ -8,7 +8,7 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Cont
 from .. import database as db
 from ..keyboards import (auto_menu, back_to_menu, conn_menu, help_list, help_nav,
                          keys_menu, main_menu, onboarding_nav, panel_menu, pub_menu,
-                         style_menu, admin_menu)
+                         style_menu)
 from ..texts import HELP_TOPICS, MENU_STATUS, ONBOARDING, START_TEXT
 from ..services import ai_router
 
@@ -23,7 +23,7 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     assert user and update.message
     await db.ensure_user(cfg.db_path, user.id)
     await update.message.reply_text(START_TEXT, parse_mode=ParseMode.HTML,
-                                    reply_markup=main_menu(cfg.is_admin(user.id)))
+                                    reply_markup=main_menu())
 
 
 async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -41,7 +41,7 @@ async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                               nsrc=len(srcs), ndst=len(dsts),
                               paused="⏸️ متوقف" if u["paused"] else "▶️ فعال")
     await q.edit_message_text(text, parse_mode=ParseMode.HTML,
-                              reply_markup=main_menu(cfg.is_admin(q.from_user.id)))
+                              reply_markup=main_menu())
 
 
 async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -106,18 +106,6 @@ async def menu_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         text = "🔔 <b>اعلان‌ها</b>\n\n" + ("\n\n---\n\n".join(x["text"] for x in items) if items else "فعلاً اعلانی نیست.")
         await q.edit_message_text(text[:3500], parse_mode=ParseMode.HTML,
                                   reply_markup=back_to_menu())
-    elif action == "samples":
-        items = await db.list_annc(cfg.db_path, limit=20)
-        samples = [x["text"] for x in items if x["text"].startswith("SAMPLE:")]
-        if samples:
-            body = "\n\n".join(s.replace("SAMPLE:", "").strip() for s in samples)
-        else:
-            body = "هنوز نمونه‌ای ثبت نشده. ادمین با /add_sample اضافه می‌کنه."
-        await q.edit_message_text(f"📸 <b>نمونه‌کارهای ربات</b>\n\n{body}"[:3500],
-                                  parse_mode=ParseMode.HTML, reply_markup=back_to_menu())
-    elif action == "admin" and cfg.is_admin(uid):
-        await q.edit_message_text("🛠️ <b>مدیریت</b>", parse_mode=ParseMode.HTML,
-                                  reply_markup=admin_menu())
     elif action == "help":
         await show_help(update, context, 0)
 

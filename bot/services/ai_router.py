@@ -59,6 +59,14 @@ PROVIDERS: dict[str, dict] = {
         "key_url": "https://console.mistral.ai/api-keys",
         "hint": "از console.mistral.ai بگیر (API Keys ← New key).",
     },
+    "minimax": {
+        "label": "MiniMax",
+        "kind": "openai",
+        "base": "https://api.minimax.io/v1",
+        "model": "MiniMax-M2",
+        "key_url": "https://platform.minimax.io",
+        "hint": "کلید MiniMax (سازگار با OpenAI).",
+    },
     "openai": {
         "label": "OpenAI",
         "kind": "openai",
@@ -79,10 +87,12 @@ PROVIDERS: dict[str, dict] = {
 
 
 async def import_env_keys(db_path: str, groq: list[str], gemini: list[str],
-                          openrouter: list[str], mistral: list[str] | None = None) -> int:
+                          openrouter: list[str], mistral: list[str] | None = None,
+                          minimax: list[str] | None = None) -> int:
     """Seed keys from .env on startup (only new ones)."""
     added = 0
-    seeds = [("groq", groq), ("gemini", gemini), ("openrouter", openrouter), ("mistral", mistral or [])]
+    seeds = [("groq", groq), ("gemini", gemini), ("openrouter", openrouter),
+             ("mistral", mistral or []), ("minimax", minimax or [])]
     for provider, keys in seeds:
         info = PROVIDERS[provider]
         for k in keys:
@@ -160,8 +170,11 @@ async def call_with_key(key_row: dict, messages: list[dict], max_tokens: int = 2
 
 # ---------- public API ----------
 async def test_key(provider: str, base_url: str, api_key: str, model: str,
-                   timeout: int = 30) -> tuple[bool, str, int]:
-    """Test a donated key with a tiny ping. Returns (ok, detail, latency_ms)."""
+                   timeout: int = 30) -> tuple[bool, str, int, str]:
+    """Test a donated key with a tiny ping. Returns (ok, detail, latency_ms, code).
+
+    code: "" on success, "auth" on invalid key, "model" on bad model name, "other" otherwise.
+    """
     t0 = time.time()
     try:
         row = {"provider": provider, "base_url": base_url, "api_key": api_key.strip(),
@@ -172,12 +185,50 @@ async def test_key(provider: str, base_url: str, api_key: str, model: str,
         )
         ms = int((time.time() - t0) * 1000)
         if "pong" in out.lower():
-            return True, f"پاسخ سالم در {ms}ms ✅", ms
-        return True, f"کلید کار کرد ولی پاسخ عجیب بود ({out[:60]}...) در {ms}ms", ms
+            return True, f"پاسخ سالم در {ms}ms ✅", ms, ""
+        return True, f"کلید کار کرد ولی پاسخ عجیب بود ({out[:60]}...) در {ms}ms", ms, ""
     except PermissionError as e:
-        return False, f"کلید نامعتبره (خطای احراز هویت): {e}", 0
+        return False, f"کلید نامعتبره (خطای احراز هویت): {e}", 0, "auth"
     except Exception as e:
-        return False, f"تست ناموفق: {str(e)[:250]}", 0
+        err = str(e)[:250]
+        detail = f"تست ناموفق: {err}"
+        code = "other"
+        if "model" in err.lower() and provider != "gemini":
+            code = "model"
+            models = await list_models_openai(base_url, api_key)
+            if models:
+                detail += ("\n\n🤖 مدل‌های موجود این سرور:\n"
+                           + "\n".join("• " + m for m in models[:12])
+                           + "\n\nبا یه مدل درست از لیست بالا دوباره تلاش کن.")
+        return False, detail, 0, code
+
+
+async def list_models_openai(base_url: str, api_key: str, timeout: int = 20) -> list[str]:
+    """Best-effort GET {base}/models for OpenAI-compatible servers."""
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as cli:
+            r = await cli.get(base_url.rstrip("/") + "/models",
+                              headers={"Authorization": f"Bearer {api_key.strip()}"})
+            if r.status_code != 200:
+                return []
+            data = r.json()
+            items = data.get("data", []) if isinstance(data, dict) else []
+            return [x.get("id", "") for x in items if isinstance(x, dict) and x.get("id")]
+    except Exception:
+        return []
+
+
+def pick_model(ids: list[str]) -> str:
+    """Pick the most chat-looking model id from a list."""
+    banned = ("embed", "tts", "whisper", "moderation", "vision", "image", "audio")
+    prefs = ("chat", "instruct", "mini", "gpt", "llama", "mistral", "qwen", "deepseek",
+             "opus", "sonnet", "gemini", "m2", "fable", "astra")
+    pool = [i for i in ids if not any(b in i.lower() for b in banned)] or ids
+    for p in prefs:
+        for i in pool:
+            if p in i.lower():
+                return i
+    return pool[0] if pool else ""
 
 
 async def chat(db_path: str, messages: list[dict], max_tokens: int = 2000,
@@ -187,7 +238,7 @@ async def chat(db_path: str, messages: list[dict], max_tokens: int = 2000,
     keys = await db.list_ai_keys(db_path, only_active=True)
     if not keys:
         raise RuntimeError(
-            "استخر کلید AI خالیه! ادمین باید در .env کلید بذاره یا کاربرها با «🎁 اهدای کلید» اضافه کنن."
+            "استخر کلید AI فعلاً خالیه! با «🎁 اهدای کلید» اولین کلید رو اضافه کن 🙏"
         )
     if order:
         prio = {p: i for i, p in enumerate(order)}
@@ -199,8 +250,13 @@ async def chat(db_path: str, messages: list[dict], max_tokens: int = 2000,
             await db.mark_key_used(db_path, k["id"], ok=True)
             return out
         except PermissionError as e:
-            await db.mark_key_used(db_path, k["id"], ok=False, dead=True)
-            errors.append(f"{k['provider']}: کلید خراب، غیرفعال شد.")
+            if (k.get("note") or "") == "env":
+                await db.mark_key_used(db_path, k["id"], ok=False, dead=True)
+                errors.append(f"{k['provider']}: کلید خراب، غیرفعال شد.")
+            else:
+                # donated key expired/revoked -> auto-delete from server
+                await db.delete_ai_key(db_path, k["id"])
+                errors.append(f"{k['provider']}: کلید منقضی بود و خودکار حذف شد.")
         except Exception as e:
             await db.mark_key_used(db_path, k["id"], ok=False)
             errors.append(f"{k['provider']}: {str(e)[:120]}")

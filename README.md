@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![Telegram](https://img.shields.io/badge/Telegram-Bot_API_%2B_Userbot-26A5E4)
-![AI](https://img.shields.io/badge/AI-Groq_%7C_Mistral_%7C_Gemini_%7C_OpenRouter-green)
+![AI](https://img.shields.io/badge/AI-Groq_%7C_Mistral_%7C_MiniMax_%7C_Gemini_%7C_OpenRouter-green)
 ![Free](https://img.shields.io/badge/Price-Free_Forever-brightgreen)
 ![Platform](https://img.shields.io/badge/Platform-Ubuntu_VPS-orange)
 
@@ -231,7 +231,7 @@ sudo journalctl -u tcm-bot -f
 5. مدل رو بفرست (یا `ok` برای پیش‌فرض)
 6. ربات **تستش می‌کنه** — اگه سالم بود میره تو استخر و از همون هم استفاده میشه؛ اگه خراب بود خطاش رو نشون میده.
 
-مدیریت: «🗝️ کلیدهای من» (حذف با `/mykey del <id>`) — ادمین همه رو تو «📊 وضعیت استخر» می‌بینه و با `/delkey <id>` حذف می‌کنه.
+مدیریت: «🗝️ کلیدهای من» (حذف با `/mykey del <id>`) — ادمین همه رو تو «📊 وضعیت استخر» می‌بینه و با `/delkey <id>` حذف می‌کنه. کلیدهای منقضی/باطل هم خودکار (هر ۶ ساعت) چک و از سرور حذف میشن.
 
 ---
 
@@ -332,8 +332,8 @@ sudo journalctl -u tcm-bot -f
 ```
 اولی باید بگه `active (running)`. تو تلگرام هم «📊 محدودیت و آمار» مصرف امروزت رو نشون میده.
 
-**۱۱. قیمت دلار/طلا گاهی نمیاد، چرا؟**
-منبع‌های رایگان قیمت گاهی قطع میشن. ربات ۳ منبع رو پشت سر هم امتحان می‌کنه؛ اگه هیچ‌کدوم جواب نداد، فردا دوباره تلاش می‌کنه.
+**۱۱. قیمت دلار/طلا چطور فعال میشه؟**
+برای قیمت پایدار یه کلید **رایگان** از `navasan.tech` بگیر (ثبت‌نام ← API Key؛ سهمیه رایگانش روزی ۱۰۰ درخواسته و ما روزی ۱ دونه می‌خوایم!) و بذار تو فایل `.env` جلوی `NAVASAN_KEY`، بعد ربات رو ری‌استارت کن. بدون کلید هم ربات منبع رایگان رو امتحان می‌کنه ولی گاهی قطعه.
 
 **۱۲. هزینه واقعی این سیستم چقدره؟**
 فقط همون VPS (حدود ۴ تا ۶ یورو در ماه). همه AIها و ابزارها رایگانن.
@@ -350,7 +350,7 @@ sudo journalctl -u tcm-bot -f
 | `/mykey del <id>` | حذف کلید اهدایی خودت |
 | `/parser_login` | (ادمین) اتصال پارسر عمومی |
 | `/announce متن` | (ادمین) ارسال اعلان به همه |
-| `/add_sample ...` | (ادمین) افزودن کانال نمونه |
+| `/admin` | (ادمین، مخفی) باز کردن پنل مدیریت |
 | `/delkey <id>` | (ادمین) حذف کلید از استخر |
 
 ---

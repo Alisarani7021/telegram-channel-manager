@@ -10,7 +10,7 @@ from telegram.constants import ParseMode
 
 from .. import database as db
 from ..keyboards import review_kb
-from . import cleaner, news as news_svc, price as price_svc, publisher, rumor
+from . import ai_router, cleaner, news as news_svc, price as price_svc, publisher, rumor
 
 
 def _tz(cfg) -> ZoneInfo:
@@ -331,6 +331,33 @@ async def nightly(bot, db_path: str, cfg) -> None:
             pass
 
 
+# ---------- AI key healthcheck: auto-delete expired donated keys ----------
+async def keys_healthcheck(bot, db_path: str) -> None:
+    for k in await db.list_ai_keys(db_path, only_active=True):
+        try:
+            ok, _, _, code = await ai_router.test_key(
+                k["provider"], k["base_url"] or "", k["api_key"], k["model"], timeout=15)
+        except Exception:
+            ok, code = False, "other"
+        if ok:
+            await db.mark_key_used(db_path, k["id"], ok=True)
+        elif code == "auth":
+            if (k.get("note") or "") == "env":
+                await db.mark_key_used(db_path, k["id"], ok=False, dead=True)
+            else:
+                await db.delete_ai_key(db_path, k["id"])
+                if k.get("added_by"):
+                    try:
+                        await bot.send_message(
+                            k["added_by"],
+                            f"🗝️ کلید اهدایی‌ت (<code>{k['provider']}/{k['model'][:40]}</code>) دیگه معتبر نیست (منقضی یا باطل شده) و خودکار از استخر حذف شد.\n\nممنون که اهدا کردی! 🙏 اگه کلید جدید داری از «🔑 کلیدهای AI» ← «🎁 اهدای کلید» اضافه کن.",
+                            parse_mode=ParseMode.HTML)
+                    except Exception:
+                        pass
+        else:
+            await db.mark_key_used(db_path, k["id"], ok=False)
+
+
 def register(sched, bot, tm, db_path: str, cfg) -> None:
     async def _poll_all():
         for u in await db.all_users(db_path):
@@ -351,6 +378,9 @@ def register(sched, bot, tm, db_path: str, cfg) -> None:
     async def _nightly():
         await nightly(bot, db_path, cfg)
 
+    async def _keys():
+        await keys_healthcheck(bot, db_path)
+
     sched.add_job(_poll_all, "interval", seconds=cfg.poll_interval_sec, id="poll",
                   max_instances=1, coalesce=True)
     sched.add_job(_queue, "interval", seconds=cfg.queue_tick_sec, id="queue",
@@ -360,3 +390,6 @@ def register(sched, bot, tm, db_path: str, cfg) -> None:
                   max_instances=1, coalesce=True)
     sched.add_job(_nightly, "cron", hour=0, minute=0, id="nightly",
                   max_instances=1, coalesce=True)
+    sched.add_job(_keys, "interval", hours=6, id="keys", max_instances=1, coalesce=True)
+    sched.add_job(_keys, "date", run_date=datetime.now() + timedelta(minutes=2),
+                  id="keys_once", max_instances=1)

@@ -41,7 +41,8 @@ class Settings:
     gemini_keys: list[str] = field(default_factory=list)
     openrouter_keys: list[str] = field(default_factory=list)
     mistral_keys: list[str] = field(default_factory=list)
-    ai_order: list[str] = field(default_factory=lambda: ["groq", "mistral", "gemini", "openrouter"])
+    minimax_keys: list[str] = field(default_factory=list)
+    ai_order: list[str] = field(default_factory=lambda: ["groq", "mistral", "minimax", "gemini", "openrouter"])
     parser_session: str = ""
     navasan_key: str = ""
     tavily_key: str = ""
@@ -72,7 +73,8 @@ class Settings:
             gemini_keys=_csv(os.getenv("GEMINI_KEYS", "")),
             openrouter_keys=_csv(os.getenv("OPENROUTER_KEYS", "")),
             mistral_keys=_csv(os.getenv("MISTRAL_KEYS", "")),
-            ai_order=_csv(os.getenv("AI_ORDER", "groq,gemini,openrouter")) or ["groq", "mistral", "gemini", "openrouter"],
+            minimax_keys=_csv(os.getenv("MINIMAX_KEYS", "")),
+            ai_order=_csv(os.getenv("AI_ORDER", "groq,gemini,openrouter")) or ["groq", "mistral", "minimax", "gemini", "openrouter"],
             parser_session=os.getenv("PARSER_SESSION", "").strip(),
             navasan_key=os.getenv("NAVASAN_KEY", "").strip(),
             tavily_key=os.getenv("TAVILY_KEY", "").strip(),

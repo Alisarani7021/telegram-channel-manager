@@ -6,7 +6,8 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from .texts import HELP_TOPICS, ONBOARDING
 
 
-def main_menu(is_admin: bool = False) -> InlineKeyboardMarkup:
+def main_menu() -> InlineKeyboardMarkup:
+    # NOTE: no admin entry here on purpose — admin panel is hidden, entry via /admin
     rows = [
         [InlineKeyboardButton("🔗 اتصال و کانال‌ها", callback_data="m:conn")],
         [InlineKeyboardButton("🎛️ کنترل پنل", callback_data="m:panel")],
@@ -16,11 +17,8 @@ def main_menu(is_admin: bool = False) -> InlineKeyboardMarkup:
          InlineKeyboardButton("📊 محدودیت و آمار", callback_data="m:stats")],
         [InlineKeyboardButton("🔑 کلیدهای AI", callback_data="m:keys"),
          InlineKeyboardButton("🔔 اعلان‌ها", callback_data="m:annc")],
-        [InlineKeyboardButton("📸 نمونه‌کارهای ربات", callback_data="m:samples")],
         [InlineKeyboardButton("❓ بلد نیستم چیکار کنم؟", callback_data="ob:0")],
     ]
-    if is_admin:
-        rows.append([InlineKeyboardButton("🛠️ مدیریت (ادمین)", callback_data="m:admin")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -201,6 +199,7 @@ def provider_pick() -> InlineKeyboardMarkup:
          InlineKeyboardButton("🟧 Mistral", callback_data="dk:mistral")],
         [InlineKeyboardButton("🔷 DeepSeek", callback_data="dk:deepseek"),
          InlineKeyboardButton("⬛ OpenAI", callback_data="dk:openai")],
+        [InlineKeyboardButton("🟣 MiniMax", callback_data="dk:minimax")],
         [InlineKeyboardButton("🛠️ آدرس دلخواه (OpenAI-Compatible)", callback_data="dk:custom")],
         [InlineKeyboardButton("❌ انصراف", callback_data="m:keys")],
     ])
@@ -214,7 +213,6 @@ def cancel_conv() -> InlineKeyboardMarkup:
 def admin_menu() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [InlineKeyboardButton("📣 ارسال اعلان", callback_data="ad:annc")],
-        [InlineKeyboardButton("📸 افزودن نمونه‌کار", callback_data="ad:sample")],
         [InlineKeyboardButton("🗝️ مدیریت استخر کلیدها", callback_data="key:pool")],
         [InlineKeyboardButton("📈 آمار کلی", callback_data="ad:stats")],
         [InlineKeyboardButton("⬅️ بازگشت", callback_data="m:menu")],

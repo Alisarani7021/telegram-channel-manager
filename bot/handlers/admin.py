@@ -1,4 +1,4 @@
-"""Admin tools: parser login (for bot mode), broadcast, samples, global stats."""
+"""Admin tools (hidden entry via /admin): parser login, broadcast, global stats."""
 from __future__ import annotations
 
 from telethon import TelegramClient, errors
@@ -9,7 +9,7 @@ from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
                           ContextTypes, ConversationHandler, MessageHandler, filters)
 
 from .. import database as db
-from ..keyboards import back_to_menu, cancel_conv
+from ..keyboards import admin_menu, back_to_menu, cancel_conv
 
 P_PHONE, P_CODE, P_2FA = range(50, 53)
 
@@ -27,8 +27,7 @@ async def parser_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     cfg = _cfg(context)
     assert update.message and update.effective_user
     if not cfg.is_admin(update.effective_user.id):
-        await update.message.reply_text("فقط ادمین! 🛡️")
-        return ConversationHandler.END
+        return ConversationHandler.END  # silent: admin entry is invisible
     await update.message.reply_text(
         "🔧 <b>اتصال پارسر عمومی</b>\n\nاین اکانت فقط برای <i>خواندن کانال‌های عمومی</i> در حالت ربات استفاده میشه.\n"
         "شماره رو با فرمت بین‌المللی بفرست: <code>+33612345678</code>",
@@ -118,7 +117,7 @@ async def parser_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     return ConversationHandler.END
 
 
-# ---------- broadcast / samples ----------
+# ---------- broadcast ----------
 async def ad_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     cfg = _cfg(context)
     q = update.callback_query
@@ -134,9 +133,6 @@ async def ad_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                                   parse_mode=ParseMode.HTML, reply_markup=back_to_menu())
     elif act == "annc":
         await q.edit_message_text("📣 متن اعلان رو با دستور زیر بفرست:\n<code>/announce متن...</code>",
-                                  parse_mode=ParseMode.HTML, reply_markup=back_to_menu())
-    elif act == "sample":
-        await q.edit_message_text("📸 نمونه رو با دستور زیر اضافه کن:\n<code>/add_sample نام کانال - https://t.me/...</code>",
                                   parse_mode=ParseMode.HTML, reply_markup=back_to_menu())
 
 
@@ -160,24 +156,20 @@ async def cmd_announce(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text(f"📣 به {sent} نفر ارسال شد.")
 
 
-async def cmd_add_sample(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Hidden admin entry (no button anywhere)."""
     cfg = _cfg(context)
     assert update.message and update.effective_user
     if not cfg.is_admin(update.effective_user.id):
-        return
-    text = (update.message.text or "").partition(" ")[2].strip()
-    if not text:
-        await update.message.reply_text("مثال: <code>/add_sample کانال تکنولوژی ما - https://t.me/xxx</code>",
-                                        parse_mode=ParseMode.HTML)
-        return
-    await db.add_annc(cfg.db_path, "SAMPLE: " + text)
-    await update.message.reply_text("📸 نمونه اضافه شد.")
+        return  # silent
+    await update.message.reply_text("🛠️ <b>مدیریت</b>", parse_mode=ParseMode.HTML,
+                                    reply_markup=admin_menu())
 
 
 def register(app: Application) -> None:
     app.add_handler(CallbackQueryHandler(ad_router, pattern=r"^ad:"))
     app.add_handler(CommandHandler("announce", cmd_announce))
-    app.add_handler(CommandHandler("add_sample", cmd_add_sample))
+    app.add_handler(CommandHandler("admin", cmd_admin))
     app.add_handler(ConversationHandler(
         entry_points=[CommandHandler("parser_login", parser_start)],
         states={P_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, parser_phone)],

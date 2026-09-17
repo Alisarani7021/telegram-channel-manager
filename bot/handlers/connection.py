@@ -163,7 +163,7 @@ async def chadd_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if u["mode"] == "personal":
             await update.message.reply_text("❌ اکانت شخصی قطع شده؛ دوباره وصل شو.")
         else:
-            await update.message.reply_text("❌ پارسر ربات هنوز آماده نیست؛ ادمین باید /parser_login رو انجام بده.")
+            await update.message.reply_text("❌ حالت ربات فعلاً آماده نیست؛ لطفاً کمی بعد دوباره تلاش کن.")
         return ConversationHandler.END
     wait = await update.message.reply_text("⏳ دارم چک می‌کنم...")
     ent, title, store_ref, status = await tm.resolve_and_join(cli, ref)
