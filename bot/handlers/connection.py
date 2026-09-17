@@ -240,8 +240,8 @@ async def cmd_tr(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def register(app: Application) -> None:
-    app.add_handler(CallbackQueryHandler(conn_router, pattern=r"^cn:"))
-    app.add_handler(CallbackQueryHandler(chdel_router, pattern=r"^chdel:"))
+    # NOTE: login conv FIRST — PTB runs only the first matching handler per
+    # group, so conn_router's pattern must never swallow cn:login.
     app.add_handler(ConversationHandler(
         entry_points=[CallbackQueryHandler(login_start, pattern=r"^cn:login$")],
         states={LOGIN_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_phone)],
@@ -250,6 +250,9 @@ def register(app: Application) -> None:
         fallbacks=[CallbackQueryHandler(conv_cancel, pattern=r"^conv:cancel$"),
                    CommandHandler("cancel", conv_cancel)],
         name="login", persistent=False))
+    app.add_handler(CallbackQueryHandler(chdel_router, pattern=r"^chdel:"))
+    # narrowed on purpose: must never swallow cn:login (see above)
+    app.add_handler(CallbackQueryHandler(conn_router, pattern=r"^cn:(src|dest|tobot|logout)$"))
     app.add_handler(ConversationHandler(
         entry_points=[CallbackQueryHandler(chadd_start, pattern=r"^chadd:")],
         states={ADD_REF: [MessageHandler(filters.TEXT & ~filters.COMMAND, chadd_received)]},

@@ -201,7 +201,7 @@ def provider_pick() -> InlineKeyboardMarkup:
          InlineKeyboardButton("⬛ OpenAI", callback_data="dk:openai")],
         [InlineKeyboardButton("🟣 MiniMax", callback_data="dk:minimax")],
         [InlineKeyboardButton("🛠️ آدرس دلخواه (OpenAI-Compatible)", callback_data="dk:custom")],
-        [InlineKeyboardButton("❌ انصراف", callback_data="m:keys")],
+        [InlineKeyboardButton("❌ انصراف", callback_data="conv:cancel")],
     ])
 
 

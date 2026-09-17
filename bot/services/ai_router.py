@@ -123,8 +123,14 @@ async def _call_openai(base: str, key: str, model: str, messages: list[dict],
             raise RuntimeError(f"rate:{r.status_code} {r.text[:200]}")
         if r.status_code >= 400:
             raise RuntimeError(f"http:{r.status_code} {r.text[:200]}")
-        data = r.json()
-        return data["choices"][0]["message"]["content"] or ""
+        try:
+            data = r.json()
+        except Exception:
+            raise RuntimeError(f"bad-response:http:{r.status_code} non-JSON body: {r.text[:150]}")
+        try:
+            return data["choices"][0]["message"]["content"] or ""
+        except (KeyError, IndexError, TypeError):
+            raise RuntimeError(f"bad-response:unexpected-shape: {str(data)[:200]}")
 
 
 async def _call_gemini(key: str, model: str, messages: list[dict],
@@ -191,15 +197,29 @@ async def test_key(provider: str, base_url: str, api_key: str, model: str,
         return False, f"کلید نامعتبره (خطای احراز هویت): {e}", 0, "auth"
     except Exception as e:
         err = str(e)[:250]
-        detail = f"تست ناموفق: {err}"
         code = "other"
-        if "model" in err.lower() and provider != "gemini":
+        if err.startswith("rate:"):
+            detail = (f"⏳ سرور گفت محدودیت نرخ (rate limit): {err[5:200]}"
+                      " — چند دقیقه بعد دوباره تلاش کن.")
+        elif err.startswith("bad-response:http:"):
+            detail = ("🛰️ سرور جواب درست نداد (بدنه غیرمنتظره): "
+                      f"{err[13:200]}\n\nاحتمال‌ها: آدرس پایه اشتباهه، سرور خرابه، "
+                      "یا این سرویس با فرمت OpenAI سازگار نیست.")
+        elif err.startswith("bad-response:"):
+            detail = f"🛰️ ساختار جواب سرور عجیب بود: {err[13:200]}"
+        elif "http:404" in err or ("model" in err.lower() and provider != "gemini"):
             code = "model"
+            detail = f"🤖 به نظر می‌رسه اسم مدل اشتباهه: {err}"
             models = await list_models_openai(base_url, api_key)
             if models:
                 detail += ("\n\n🤖 مدل‌های موجود این سرور:\n"
                            + "\n".join("• " + m for m in models[:12])
                            + "\n\nبا یه مدل درست از لیست بالا دوباره تلاش کن.")
+            else:
+                detail += ("\n\n(نتونستم لیست مدل‌های سرور رو هم بگیرم — "
+                           "اگه آدرس رو دستی وارد کردی، یه بار دیگه چکش کن.)")
+        else:
+            detail = f"تست ناموفق: {err}"
         return False, detail, 0, code
 
 
