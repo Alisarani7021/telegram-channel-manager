@@ -1,0 +1,11 @@
+# Alternative run method (instead of systemd):
+#   cp .env.example .env   # then edit .env
+#   docker compose up -d --build
+#   docker compose logs -f
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/app/data

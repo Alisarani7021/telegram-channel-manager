@@ -1,0 +1,13 @@
+# Core
+python-telegram-bot[job-queue]==21.6
+telethon==1.37.0
+aiosqlite==0.20.0
+apscheduler==3.10.4
+python-dotenv==1.0.1
+tzdata==2024.1
+
+# Network / parsing
+httpx==0.27.2
+feedparser==6.0.11
+beautifulsoup4==4.12.3
+lxml==5.2.2
