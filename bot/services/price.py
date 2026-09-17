@@ -1,12 +1,49 @@
-"""Daily dollar/gold price (free sources with fallbacks)."""
+"""Daily dollar/gold price.
+
+Primary: Navasan (free key from navasan.tech — 1 request/day is far below free quota).
+Fallback: BRSAPI free key (sometimes down, kept as best-effort).
+"""
 from __future__ import annotations
 
 import httpx
 
 
+def _pick(d: dict, *candidates: str) -> str:
+    for key in candidates:
+        v = d.get(key)
+        if isinstance(v, dict):
+            v = v.get("value") or v.get("price")
+        if v:
+            return str(v)
+    # fuzzy: first key containing any candidate substring
+    low = {k.lower(): k for k in d}
+    for cand in candidates:
+        for lk, orig in low.items():
+            if cand in lk:
+                v = d[orig]
+                if isinstance(v, dict):
+                    v = v.get("value") or v.get("price")
+                if v:
+                    return str(v)
+    return ""
+
+
 async def fetch_prices(navasan_key: str = "") -> dict:
     """Returns {dollar: str, gold18: str, source: str}. Raises on total failure."""
-    # 1) BRSAPI free key
+    # 1) Navasan (needs free key, most reliable)
+    if navasan_key:
+        try:
+            async with httpx.AsyncClient(timeout=20) as cli:
+                r = await cli.get(f"https://api.navasan.tech/latest/?api_key={navasan_key}")
+                if r.status_code == 200:
+                    d = r.json()
+                    dollar = _pick(d, "usd_sell", "usd", "dollar")
+                    gold18 = _pick(d, "gold_18", "geram18", "18ayar", "tala", "gold") or _pick(d, "sekke")
+                    if dollar:
+                        return {"dollar": dollar, "gold18": gold18 or "—", "source": "Navasan"}
+        except Exception:
+            pass
+    # 2) BRSAPI free key (best-effort, often down)
     try:
         async with httpx.AsyncClient(timeout=20) as cli:
             r = await cli.get("https://brsapi.ir/Api/Market/Gold_Currency.php?key=Free")
@@ -24,33 +61,10 @@ async def fetch_prices(navasan_key: str = "") -> dict:
                             "source": "BRSAPI"}
     except Exception:
         pass
-    # 2) Navasan (if admin provided a key)
-    if navasan_key:
-        try:
-            async with httpx.AsyncClient(timeout=20) as cli:
-                r = await cli.get(f"https://api.navasan.tech/latest/?api_key={navasan_key}")
-                if r.status_code == 200:
-                    d = r.json()
-                    usd = (d.get("usd_sell") or {}).get("value")
-                    sek = (d.get("sekke") or {}).get("value")
-                    if usd:
-                        return {"dollar": str(usd), "gold18": str(seek or "—"),
-                                "source": "Navasan"}
-        except Exception:
-            pass
-    # 3) Bonbast public (best-effort)
-    try:
-        async with httpx.AsyncClient(timeout=20) as cli:
-            r = await cli.get("https://api.bonbast.com/",
-                              headers={"User-Agent": "Mozilla/5.0"})
-            if r.status_code == 200:
-                d = r.json()
-                usd = d.get("usd1") or d.get("usd")
-                if usd:
-                    return {"dollar": str(usd), "gold18": "—", "source": "Bonbast"}
-    except Exception:
-        pass
-    raise RuntimeError("هیچ منبع قیمتی جواب نداد.")
+    raise RuntimeError(
+        "هیچ منبع قیمتی جواب نداد. برای قیمت پایدار یه کلید رایگان از navasan.tech بگیر "
+        "و بذار تو .env جلوی NAVASAN_KEY (آموزشش تو README بخش قیمت دلار و طلاست)."
+    )
 
 
 def fa_num(s: str) -> str:
@@ -62,9 +76,10 @@ def fa_num(s: str) -> str:
 
 
 def format_price_message(p: dict) -> str:
+    gold = f"🪙 طلای ۱۸ عیار: <b>{fa_num(p['gold18'])} تومان</b>\n" if p.get("gold18") not in ("", "—") else ""
     return (
         "💰 <b>قیمت امروز دلار و طلا</b>\n\n"
         f"💵 دلار آزاد: <b>{fa_num(p['dollar'])} تومان</b>\n"
-        f"🪙 طلای ۱۸ عیار: <b>{fa_num(p['gold18'])} تومان</b>\n\n"
+        f"{gold}\n"
         f"<i>منبع: {p['source']}</i>"
     )

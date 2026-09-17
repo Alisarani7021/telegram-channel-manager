@@ -2,7 +2,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![Telegram](https://img.shields.io/badge/Telegram-Bot_API_%2B_Userbot-26A5E4)
-![AI](https://img.shields.io/badge/AI-Groq_%7C_Gemini_%7C_OpenRouter-green)
+![AI](https://img.shields.io/badge/AI-Groq_%7C_Mistral_%7C_Gemini_%7C_OpenRouter-green)
 ![Free](https://img.shields.io/badge/Price-Free_Forever-brightgreen)
 ![Platform](https://img.shields.io/badge/Platform-Ubuntu_VPS-orange)
 
@@ -119,6 +119,9 @@
 **۳) OpenRouter (مدل‌های رایگان):**
 - برو `openrouter.ai` ← ثبت‌نام ← **Keys** ← **Create Key** ← کپی کن
 
+**۴) Mistral (اروپایی، سریع):**
+- برو `console.mistral.ai` ← ثبت‌نام ← **API Keys** ← **New key** ← کپی کن
+
 > کاربرهات بعداً هم می‌تونن با «🎁 اهدای کلید» داخل خود ربات کلید اضافه کنن؛ ربات اول تستش می‌کنه بعد می‌بره تو استخر.
 
 ---
@@ -174,6 +177,7 @@ API_HASH=رشته‌ای-که-از-my.telegram.org-گرفتی
 ADMIN_IDS=آیدی-عددی-خودت
 GROQ_KEYS=gsk_xxx
 GEMINI_KEYS=AIza_xxx
+MISTRAL_KEYS=xxxx
 ```
 
 - آیدی عددی خودت رو از ربات **@userinfobot** بگیر.

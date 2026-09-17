@@ -23,7 +23,7 @@ PROVIDERS: dict[str, dict] = {
         "label": "Groq",
         "kind": "openai",
         "base": "https://api.groq.com/openai/v1",
-        "model": "llama-3.3-70b-versatile",
+        "model": "openai/gpt-oss-20b",
         "key_url": "https://console.groq.com/keys",
         "hint": "از console.groq.com رایگان بگیر (ثبت‌نام با گوگل، بدون کارت).",
     },
@@ -31,7 +31,7 @@ PROVIDERS: dict[str, dict] = {
         "label": "Gemini",
         "kind": "gemini",
         "base": "https://generativelanguage.googleapis.com",
-        "model": "gemini-2.0-flash",
+        "model": "gemini-2.5-flash",
         "key_url": "https://aistudio.google.com/apikey",
         "hint": "از aistudio.google.com رایگان بگیر (Get API Key).",
     },
@@ -50,6 +50,14 @@ PROVIDERS: dict[str, dict] = {
         "model": "deepseek-chat",
         "key_url": "https://platform.deepseek.com/api_keys",
         "hint": "از platform.deepseek.com بگیر (ارزون، گاهی کردیت اولیه رایگان).",
+    },
+    "mistral": {
+        "label": "Mistral",
+        "kind": "openai",
+        "base": "https://api.mistral.ai/v1",
+        "model": "mistral-small-latest",
+        "key_url": "https://console.mistral.ai/api-keys",
+        "hint": "از console.mistral.ai بگیر (API Keys ← New key).",
     },
     "openai": {
         "label": "OpenAI",
@@ -71,10 +79,10 @@ PROVIDERS: dict[str, dict] = {
 
 
 async def import_env_keys(db_path: str, groq: list[str], gemini: list[str],
-                          openrouter: list[str]) -> int:
+                          openrouter: list[str], mistral: list[str] | None = None) -> int:
     """Seed keys from .env on startup (only new ones)."""
     added = 0
-    seeds = [("groq", groq), ("gemini", gemini), ("openrouter", openrouter)]
+    seeds = [("groq", groq), ("gemini", gemini), ("openrouter", openrouter), ("mistral", mistral or [])]
     for provider, keys in seeds:
         info = PROVIDERS[provider]
         for k in keys:
@@ -143,7 +151,7 @@ async def call_with_key(key_row: dict, messages: list[dict], max_tokens: int = 2
     provider = key_row["provider"]
     kind = PROVIDERS.get(provider, {}).get("kind", "openai")
     if kind == "gemini" or provider == "gemini":
-        return await _call_gemini(key_row["api_key"], key_row["model"] or "gemini-2.0-flash",
+        return await _call_gemini(key_row["api_key"], key_row["model"] or "gemini-2.5-flash",
                                   messages, max_tokens, temperature, timeout)
     base = key_row["base_url"] or PROVIDERS.get(provider, {}).get("base", "")
     return await _call_openai(base, key_row["api_key"], key_row["model"],

@@ -30,7 +30,7 @@ async def main() -> None:
     Path("data").mkdir(exist_ok=True)
     await db.init_db(cfg.db_path)
     added = await ai_router.import_env_keys(cfg.db_path, cfg.groq_keys, cfg.gemini_keys,
-                                            cfg.openrouter_keys)
+                                            cfg.openrouter_keys, cfg.mistral_keys)
     log.info("env keys imported: %d", added)
 
     # parser session from file (saved by /parser_login) if env empty

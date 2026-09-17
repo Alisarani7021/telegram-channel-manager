@@ -198,7 +198,9 @@ def provider_pick() -> InlineKeyboardMarkup:
         [InlineKeyboardButton("⚡ Groq (رایگان)", callback_data="dk:groq"),
          InlineKeyboardButton("✨ Gemini (رایگان)", callback_data="dk:gemini")],
         [InlineKeyboardButton("🌐 OpenRouter (رایگان)", callback_data="dk:openrouter"),
-         InlineKeyboardButton("🔷 DeepSeek", callback_data="dk:deepseek")],
+         InlineKeyboardButton("🟧 Mistral", callback_data="dk:mistral")],
+        [InlineKeyboardButton("🔷 DeepSeek", callback_data="dk:deepseek"),
+         InlineKeyboardButton("⬛ OpenAI", callback_data="dk:openai")],
         [InlineKeyboardButton("🛠️ آدرس دلخواه (OpenAI-Compatible)", callback_data="dk:custom")],
         [InlineKeyboardButton("❌ انصراف", callback_data="m:keys")],
     ])
