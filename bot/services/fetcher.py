@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import time
 
 from telethon import TelegramClient, errors
 from telethon.sessions import StringSession
@@ -18,6 +19,14 @@ def normalize_ref(ref: str) -> str:
     if m and "joinchat" not in ref and "/+" not in ref:
         return "@" + m.group(1)
     return ref
+
+
+_FA_DIGITS = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+
+
+def normalize_login_code(raw: str) -> str:
+    """Normalize a login code: Persian/Arabic digits -> ASCII, drop spaces etc."""
+    return "".join(ch for ch in raw.translate(_FA_DIGITS) if ch.isdigit())
 
 
 class TManager:
@@ -84,6 +93,10 @@ class TManager:
 
     # ---------- personal login flow ----------
     async def send_code(self, user_id: int, phone: str) -> str:
+        # don't burn the previous code with an accidental double request
+        cur = self.login_state.get(user_id)
+        if cur and cur.get("phone") == phone.strip() and time.time() - cur.get("ts", 0) < 90:
+            return "already_sent"
         old = self.login_state.pop(user_id, None)
         if old:
             try:
@@ -101,7 +114,7 @@ class TManager:
         except Exception as e:
             return f"خطا: {e}"
         self.login_state[user_id] = {"client": cli, "phone": phone.strip(),
-                                     "hash": sent.phone_code_hash}
+                                     "hash": sent.phone_code_hash, "ts": time.time()}
         return "ok"
 
     async def submit_code(self, user_id: int, code: str) -> str:
@@ -109,17 +122,40 @@ class TManager:
         if not st:
             return "اول شماره رو بفرست."
         cli, phone, h = st["client"], st["phone"], st["hash"]
+        code = normalize_login_code(code)
+        if not code:
+            return "کد رو پیدا نکردم! همون عددی که تلگرام فرستاد رو بفرست."
         try:
-            await cli.sign_in(phone=phone, code=code.strip(), phone_code_hash=h)
+            await cli.sign_in(phone=phone, code=code, phone_code_hash=h)
         except errors.SessionPasswordNeededError:
             return "2fa"
         except errors.PhoneCodeInvalidError:
-            return "کد اشتباهه! دوباره بفرست."
+            return "کد اشتباهه! دقیقاً همون ۵ رقمی که تلگرام فرستاد رو بفرست."
+        except errors.PhoneCodeExpiredError:
+            return ("⏰ این کد سوخته/منقضی شده! (هر کد فقط چند دقیقه اعتبار داره و با درخواست کد جدید، قبلی می‌سوزه.)\n"
+                    "دکمه «🔄 ارسال مجدد کد» رو بزن و کد جدید رو سریع وارد کن.")
         except errors.FloodWaitError as e:
             return f"تلگرام محدودت کرده، {e.seconds} ثانیه بعد دوباره تلاش کن."
         except Exception as e:
             return f"خطا: {e}"
         await self._save_session(user_id, cli)
+        return "ok"
+
+    async def resend_code(self, user_id: int) -> str:
+        st = self.login_state.get(user_id)
+        if not st:
+            return "expired"
+        cli = st["client"]
+        try:
+            if not cli.is_connected():
+                await cli.connect()
+            sent = await cli.send_code_request(st["phone"])
+        except errors.FloodWaitError as e:
+            return f"wait:{e.seconds}"
+        except Exception as e:
+            return f"err:{e}"
+        st["hash"] = sent.phone_code_hash
+        st["ts"] = time.time()
         return "ok"
 
     async def submit_2fa(self, user_id: int, password: str) -> str:

@@ -93,7 +93,9 @@ def review_kb(qid: int) -> InlineKeyboardMarkup:
         InlineKeyboardButton("✅ تایید", callback_data=f"rv:ok:{qid}"),
         InlineKeyboardButton("⏩ ارسال فوری", callback_data=f"rv:now:{qid}"),
         InlineKeyboardButton("❌ رد", callback_data=f"rv:no:{qid}"),
-    ]])
+    ],
+        [InlineKeyboardButton("⏭️ بعداً تصمیم می‌گیرم", callback_data=f"rv:later:{qid}")],
+    ])
 
 
 # ---- publish settings ----
@@ -201,6 +203,13 @@ def provider_pick() -> InlineKeyboardMarkup:
          InlineKeyboardButton("⬛ OpenAI", callback_data="dk:openai")],
         [InlineKeyboardButton("🟣 MiniMax", callback_data="dk:minimax")],
         [InlineKeyboardButton("🛠️ آدرس دلخواه (OpenAI-Compatible)", callback_data="dk:custom")],
+        [InlineKeyboardButton("❌ انصراف", callback_data="conv:cancel")],
+    ])
+
+
+def login_code_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔄 ارسال مجدد کد", callback_data="login:resend")],
         [InlineKeyboardButton("❌ انصراف", callback_data="conv:cancel")],
     ])
 

@@ -9,6 +9,7 @@ from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
                           ContextTypes, ConversationHandler, MessageHandler, filters)
 
 from .. import database as db
+from ..services.fetcher import normalize_login_code
 from ..keyboards import admin_menu, back_to_menu, cancel_conv
 
 P_PHONE, P_CODE, P_2FA = range(50, 53)
@@ -44,7 +45,7 @@ async def parser_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     try:
         sent = await cli.send_code_request(phone)
     except Exception as e:
-        await update.message.reply_text(f"❌ خطا: {e}")
+        await update.message.reply_text(f"❌ خطا: {e}", reply_markup=cancel_conv())
         return P_PHONE
     context.user_data["pcli"] = cli
     context.user_data["pphone"] = phone
@@ -57,13 +58,20 @@ async def parser_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     assert update.message and update.message.text
     cli = context.user_data.get("pcli")
     try:
-        await cli.sign_in(phone=context.user_data["pphone"], code=update.message.text.strip(),
+        await cli.sign_in(phone=context.user_data["pphone"], code=normalize_login_code(update.message.text),
                           phone_code_hash=context.user_data["phash"])
     except errors.SessionPasswordNeededError:
         await update.message.reply_text("🔐 رمز دومرحله‌ای رو بفرست:", reply_markup=cancel_conv())
         return P_2FA
+    except errors.PhoneCodeInvalidError:
+        await update.message.reply_text("❌ کد اشتباهه! دوباره بفرست:", reply_markup=cancel_conv())
+        return P_CODE
+    except errors.PhoneCodeExpiredError:
+        await update.message.reply_text("⏰ این کد سوخته! /cancel بزن و با /parser_login از اول شروع کن (کد جدید رو سریع وارد کن).",
+                                        reply_markup=cancel_conv())
+        return P_CODE
     except Exception as e:
-        await update.message.reply_text(f"❌ {e}")
+        await update.message.reply_text(f"❌ {e}", reply_markup=cancel_conv())
         return P_CODE
     return await _parser_done(update, context)
 
@@ -74,7 +82,7 @@ async def parser_2fa(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     try:
         await cli.sign_in(password=update.message.text.strip())
     except Exception as e:
-        await update.message.reply_text(f"❌ {e}")
+        await update.message.reply_text(f"❌ {e}", reply_markup=cancel_conv())
         return P_2FA
     try:
         await update.message.delete()
@@ -98,7 +106,7 @@ async def _parser_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     assert update.message
     await update.message.reply_text(
         "✅ پارسر وصل شد! حالت ربات فعاله.\n\n<i>سشن در data/parser_session.txt ذخیره شد؛ می‌تونی بذاریش تو .env به اسم PARSER_SESSION.</i>",
-        parse_mode=ParseMode.HTML)
+        parse_mode=ParseMode.HTML, reply_markup=back_to_menu())
     return ConversationHandler.END
 
 
@@ -111,9 +119,9 @@ async def parser_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             pass
     if update.callback_query:
         await update.callback_query.answer()
-        await update.callback_query.edit_message_text("❌ انصراف.")
+        await update.callback_query.edit_message_text("❌ انصراف.", reply_markup=back_to_menu())
     elif update.message:
-        await update.message.reply_text("❌ انصراف.")
+        await update.message.reply_text("❌ انصراف.", reply_markup=back_to_menu())
     return ConversationHandler.END
 
 
@@ -143,7 +151,8 @@ async def cmd_announce(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     text = (update.message.text or "").partition(" ")[2].strip()
     if not text:
-        await update.message.reply_text("متن رو هم بفرست: <code>/announce سلام!</code>", parse_mode=ParseMode.HTML)
+        await update.message.reply_text("متن رو هم بفرست: <code>/announce سلام!</code>", parse_mode=ParseMode.HTML,
+                                        reply_markup=back_to_menu())
         return
     await db.add_annc(cfg.db_path, text)
     sent = 0
@@ -153,7 +162,7 @@ async def cmd_announce(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             sent += 1
         except Exception:
             continue
-    await update.message.reply_text(f"📣 به {sent} نفر ارسال شد.")
+    await update.message.reply_text(f"📣 به {sent} نفر ارسال شد.", reply_markup=back_to_menu())
 
 
 async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

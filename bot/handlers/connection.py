@@ -8,7 +8,7 @@ from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
                           ContextTypes, ConversationHandler, MessageHandler, filters)
 
 from .. import database as db
-from ..keyboards import cancel_conv, channel_list, conn_menu
+from ..keyboards import back_to_menu, cancel_conv, channel_list, conn_menu, login_code_kb
 from ..texts import ASK_REF_DEST, ASK_REF_SOURCE
 
 LOGIN_PHONE, LOGIN_CODE, LOGIN_2FA = range(3)
@@ -93,11 +93,37 @@ async def login_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     assert update.message and update.message.text
     tm = _tm(context)
     res = await tm.send_code(update.effective_user.id, update.message.text.strip())  # type: ignore
+    if res == "already_sent":
+        await update.message.reply_text(
+            "📩 کد همین یکی دو دقیقه پیش فرستاده شد! همون رو وارد کن — اگه نیومده «🔄 ارسال مجدد کد» رو بزن.",
+            reply_markup=login_code_kb())
+        return LOGIN_CODE
     if res != "ok":
-        await update.message.reply_text(f"❌ {res}")
+        await update.message.reply_text(f"❌ {res}", reply_markup=cancel_conv())
         return LOGIN_PHONE
     await update.message.reply_text("📩 کد تایید تلگرام رو بفرست (همون که به اکانتت اومد):",
-                                    reply_markup=cancel_conv())
+                                    reply_markup=login_code_kb())
+    return LOGIN_CODE
+
+
+async def login_resend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    q = update.callback_query
+    assert q
+    res = await _tm(context).resend_code(q.from_user.id)
+    if res == "ok":
+        await q.answer("کد جدید فرستاده شد ✅")
+        await q.edit_message_text("📩 کد جدید فرستاده شد! سریع واردش کن:",
+                                  reply_markup=login_code_kb())
+    elif res.startswith("wait:"):
+        await q.answer(f"کمی صبر کن! تلگرام گفته {res[5:]} ثانیه دیگه.", show_alert=True)
+    elif res == "expired":
+        await q.answer("نشست لاگین پیدا نشد!", show_alert=True)
+        await q.edit_message_text("❌ نشست لاگین پیدا نشد (شاید ربات ری‌استارت شده). انصراف بزن و از اول شروع کن.",
+                                  reply_markup=cancel_conv())
+    else:
+        await q.answer("خطا!", show_alert=True)
+        await q.edit_message_text(f"❌ {res[4:] if res.startswith('err:') else res}",
+                                  reply_markup=login_code_kb())
     return LOGIN_CODE
 
 
@@ -112,7 +138,7 @@ async def login_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if res == "2fa":
         await update.message.reply_text("🔐 رمز دومرحله‌ای (پسورد ابری) رو بفرست:", reply_markup=cancel_conv())
         return LOGIN_2FA
-    await update.message.reply_text(f"❌ {res}")
+    await update.message.reply_text(f"❌ {res}", reply_markup=login_code_kb())
     return LOGIN_CODE
 
 
@@ -128,7 +154,7 @@ async def login_2fa(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         await update.message.reply_text("✅ اکانت وصل شد! حالا کانال مقصد و مبدا رو اضافه کن.",
                                         reply_markup=conn_menu("personal", True))
         return ConversationHandler.END
-    await update.message.reply_text(f"❌ {res}")
+    await update.message.reply_text(f"❌ {res}", reply_markup=cancel_conv())
     return LOGIN_2FA
 
 
@@ -141,10 +167,12 @@ async def chadd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     kind = q.data.split(":")[1]
     context.user_data["chadd_kind"] = kind
     if kind == "src" and len(await db.list_sources(cfg.db_path, q.from_user.id)) >= cfg.max_sources:
-        await q.edit_message_text(f"⚠️ سقف مبدا ({cfg.max_sources}) پره! اول یکیش رو حذف کن.")
+        await q.edit_message_text(f"⚠️ سقف مبدا ({cfg.max_sources}) پره! اول یکیش رو حذف کن.",
+                                      reply_markup=back_to_menu())
         return ConversationHandler.END
     if kind == "dest" and len(await db.list_dests(cfg.db_path, q.from_user.id)) >= cfg.max_dests:
-        await q.edit_message_text(f"⚠️ سقف مقصد ({cfg.max_dests}) پره! اول حذفش کن.")
+        await q.edit_message_text(f"⚠️ سقف مقصد ({cfg.max_dests}) پره! اول حذفش کن.",
+                                      reply_markup=back_to_menu())
         return ConversationHandler.END
     await q.edit_message_text(ASK_REF_SOURCE if kind == "src" else ASK_REF_DEST,
                               parse_mode=ParseMode.HTML, reply_markup=cancel_conv())
@@ -161,17 +189,19 @@ async def chadd_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     cli = tm.client_for(uid, u["mode"])
     if cli is None or not cli.is_connected():
         if u["mode"] == "personal":
-            await update.message.reply_text("❌ اکانت شخصی قطع شده؛ دوباره وصل شو.")
+            await update.message.reply_text("❌ اکانت شخصی قطع شده؛ دوباره وصل شو.",
+                                            reply_markup=back_to_menu())
         else:
-            await update.message.reply_text("❌ حالت ربات فعلاً آماده نیست؛ لطفاً کمی بعد دوباره تلاش کن.")
+            await update.message.reply_text("❌ حالت ربات فعلاً آماده نیست؛ لطفاً کمی بعد دوباره تلاش کن.",
+                                            reply_markup=back_to_menu())
         return ConversationHandler.END
     wait = await update.message.reply_text("⏳ دارم چک می‌کنم...")
     ent, title, store_ref, status = await tm.resolve_and_join(cli, ref)
     if not ent:
-        await wait.edit_text(f"❌ {status}")
+        await wait.edit_text(f"❌ {status}", reply_markup=cancel_conv())
         return ADD_REF
     if not getattr(ent, "broadcast", False):
-        await wait.edit_text("⚠️ این یه کانال نیست! فقط کانال قبول می‌کنم.")
+        await wait.edit_text("⚠️ این یه کانال نیست! فقط کانال قبول می‌کنم.", reply_markup=cancel_conv())
         return ADD_REF
     # set last_msg_id to current latest so we don't repost history
     try:
@@ -185,13 +215,14 @@ async def chadd_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         extra = ""
         if u["mode"] == "bot":
             extra = "\n\n<blockquote>تو حالت ربات فقط پست‌های جدید خونده میشن (تاریخچه قدیمی نه).</blockquote>"
-        await wait.edit_text(f"✅ مبدا اضافه شد: <b>{title}</b>{extra}", parse_mode=ParseMode.HTML)
+        await wait.edit_text(f"✅ مبدا اضافه شد: <b>{title}</b>{extra}", parse_mode=ParseMode.HTML,
+                             reply_markup=back_to_menu())
     else:
         await db.add_dest(cfg.db_path, uid, store_ref, str(title))
         who = "خودِ ربات" if u["mode"] == "bot" else "اکانت شخصیت"
         await wait.edit_text(
             f"✅ مقصد اضافه شد: <b>{title}</b>\n\n⚠️ حتماً {who} رو تو این کانال <b>ادمین</b> کن (دسترسی ارسال پیام)!",
-            parse_mode=ParseMode.HTML)
+            parse_mode=ParseMode.HTML, reply_markup=back_to_menu())
     return ConversationHandler.END
 
 
@@ -199,9 +230,9 @@ async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     q = update.callback_query
     if q:
         await q.answer()
-        await q.edit_message_text("❌ انصراف داده شد.")
+        await q.edit_message_text("❌ انصراف داده شد.", reply_markup=back_to_menu())
     elif update.message:
-        await update.message.reply_text("❌ انصراف داده شد.")
+        await update.message.reply_text("❌ انصراف داده شد.", reply_markup=back_to_menu())
     return ConversationHandler.END
 
 
@@ -213,30 +244,32 @@ async def cmd_tr(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if len(args) < 2 or args[1] == "list":
         items = await db.list_sources(cfg.db_path, update.effective_user.id)
         if not items:
-            await update.message.reply_text("مبدایی نداری.")
+            await update.message.reply_text("مبدایی نداری.", reply_markup=back_to_menu())
             return
         lines = ["📡 برای تغییر ترجمه هر کانال: <code>/tr &lt;id&gt;</code>\n"]
         for it in items:
             ov = it.get("translate_override")
             st = "پیش‌فرض" if ov is None else ("روشن" if ov else "خاموش")
             lines.append(f"• <code>{it['id']}</code> — {it.get('title') or it['channel']} (ترجمه: {st})")
-        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
+        await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML,
+                                        reply_markup=back_to_menu())
         return
     try:
         sid = int(args[1])
     except ValueError:
-        await update.message.reply_text("آیدی عددی بده. مثال: <code>/tr 3</code>", parse_mode=ParseMode.HTML)
+        await update.message.reply_text("آیدی عددی بده. مثال: <code>/tr 3</code>", parse_mode=ParseMode.HTML,
+                                        reply_markup=back_to_menu())
         return
     items = await db.list_sources(cfg.db_path, update.effective_user.id)
     cur = next((x for x in items if x["id"] == sid), None)
     if not cur:
-        await update.message.reply_text("این آیدی مال تو نیست!")
+        await update.message.reply_text("این آیدی مال تو نیست!", reply_markup=back_to_menu())
         return
     nxt = 0 if cur.get("translate_override") is None else (1 if not cur.get("translate_override") else None)
     await db.set_source_translate(cfg.db_path, sid, nxt)
     label = "پیش‌فرض" if nxt is None else ("روشن" if nxt else "خاموش")
     await update.message.reply_text(f"ترجمه «{cur.get('title') or cur['channel']}» شد: <b>{label}</b>",
-                                    parse_mode=ParseMode.HTML)
+                                    parse_mode=ParseMode.HTML, reply_markup=back_to_menu())
 
 
 def register(app: Application) -> None:
@@ -245,7 +278,8 @@ def register(app: Application) -> None:
     app.add_handler(ConversationHandler(
         entry_points=[CallbackQueryHandler(login_start, pattern=r"^cn:login$")],
         states={LOGIN_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_phone)],
-                LOGIN_CODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_code)],
+                LOGIN_CODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_code),
+                             CallbackQueryHandler(login_resend, pattern=r"^login:resend$")],
                 LOGIN_2FA: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_2fa)]},
         fallbacks=[CallbackQueryHandler(conv_cancel, pattern=r"^conv:cancel$"),
                    CommandHandler("cancel", conv_cancel)],

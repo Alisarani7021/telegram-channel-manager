@@ -56,18 +56,18 @@ async def cmd_mykey(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         try:
             kid = int(parts[2])
         except ValueError:
-            await update.message.reply_text("آیدی عددی بده.")
+            await update.message.reply_text("آیدی عددی بده.", reply_markup=back_to_menu())
             return
         keys = [k for k in await db.list_ai_keys(cfg.db_path)
                 if k["id"] == kid and (k["added_by"] == update.effective_user.id or cfg.is_admin(update.effective_user.id))]
         if not keys:
-            await update.message.reply_text("این کلید مال تو نیست!")
+            await update.message.reply_text("این کلید مال تو نیست!", reply_markup=back_to_menu())
             return
         await db.delete_ai_key(cfg.db_path, kid)
-        await update.message.reply_text("🗑️ کلید حذف شد.")
+        await update.message.reply_text("🗑️ کلید حذف شد.", reply_markup=back_to_menu())
     else:
         await update.message.reply_text("استفاده: <code>/mykey del &lt;id&gt;</code> — آیدی‌ها رو از «🗝️ کلیدهای من» ببین.",
-                                        parse_mode=ParseMode.HTML)
+                                        parse_mode=ParseMode.HTML, reply_markup=back_to_menu())
 
 
 async def cmd_delkey(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -77,13 +77,14 @@ async def cmd_delkey(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         return
     parts = (update.message.text or "").split()
     if len(parts) != 2:
-        await update.message.reply_text("استفاده: <code>/delkey &lt;id&gt;</code>", parse_mode=ParseMode.HTML)
+        await update.message.reply_text("استفاده: <code>/delkey &lt;id&gt;</code>", parse_mode=ParseMode.HTML,
+                                        reply_markup=back_to_menu())
         return
     try:
         await db.delete_ai_key(cfg.db_path, int(parts[1]))
-        await update.message.reply_text("🗑️ حذف شد.")
+        await update.message.reply_text("🗑️ حذف شد.", reply_markup=back_to_menu())
     except ValueError:
-        await update.message.reply_text("آیدی عددی بده.")
+        await update.message.reply_text("آیدی عددی بده.", reply_markup=back_to_menu())
 
 
 # ---------- donate wizard ----------
@@ -120,7 +121,7 @@ async def dk_url(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     assert update.message and update.message.text
     url = update.message.text.strip().rstrip("/")
     if not url.startswith("http"):
-        await update.message.reply_text("❌ آدرس باید با http شروع بشه! دوباره بفرست:")
+        await update.message.reply_text("❌ آدرس باید با http شروع بشه! دوباره بفرست:", reply_markup=cancel_conv())
         return DK_URL
     context.user_data["dk"]["url"] = url
     await update.message.reply_text("🔑 حالا کلید (API Key) رو بفرست:", reply_markup=cancel_conv())
@@ -131,7 +132,7 @@ async def dk_key(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     assert update.message and update.message.text
     key = update.message.text.strip()
     if len(key) < 8:
-        await update.message.reply_text("❌ کلید خیلی کوتاهه! دوباره بفرست:")
+        await update.message.reply_text("❌ کلید خیلی کوتاهه! دوباره بفرست:", reply_markup=cancel_conv())
         return DK_KEY
     context.user_data["dk"]["key"] = key
     provider = context.user_data["dk"]["provider"]
@@ -172,7 +173,7 @@ async def dk_model(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if model.lower() == "ok":
         model = context.user_data.get("dk", {}).get("suggestion") or default_model
     if not model:
-        await update.message.reply_text("❌ مدل خالیه! دوباره بفرست:")
+        await update.message.reply_text("❌ مدل خالیه! دوباره بفرست:", reply_markup=cancel_conv())
         return DK_MODEL
     if await db.key_exists(cfg.db_path, dk["key"]):
         await update.message.reply_text("⚠️ این کلید قبلاً تو استخر هست! مرسی ولی تکراریه 😄",
@@ -181,7 +182,8 @@ async def dk_model(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     wait = await update.message.reply_text("⏳ دارم کلید رو تست می‌کنم...")
     ok, detail, ms, _code = await ai_router.test_key(provider, dk.get("url", ""), dk["key"], model)
     if not ok:
-        await wait.edit_text(f"❌ کلید قبول نشد!\n\n{detail}\n\nدوباره با /start ← کلیدهای AI تلاش کن.")
+        await wait.edit_text(f"❌ کلید قبول نشد!\n\n{detail}\n\nدوباره با /start ← کلیدهای AI تلاش کن.",
+                               reply_markup=back_to_menu())
         return ConversationHandler.END
     await db.add_ai_key(cfg.db_path, provider, dk.get("url", ""), dk["key"], model,
                         added_by=uid, note="donated")

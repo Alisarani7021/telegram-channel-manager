@@ -6,6 +6,7 @@ from telegram.constants import ParseMode
 from telegram.ext import Application, CallbackQueryHandler, ContextTypes
 
 from .. import database as db
+from ..keyboards import back_to_menu
 
 
 def _cfg(context):
@@ -34,12 +35,18 @@ async def review_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             pass
         return
     await q.answer()
+    if action == "later":
+        try:
+            await q.edit_message_reply_markup(None)
+        except Exception:
+            pass
+        return
     if action == "no":
         await db.set_queue(cfg.db_path, qid, status="rejected", reason="رد دستی")
         await db.bump_stat(cfg.db_path, q.from_user.id, "rejected", "رد دستی")
         try:
             await q.edit_message_text((q.message.text_html if q.message else "رد شد") + "\n\n❌ <b>رد شد.</b>",
-                                      parse_mode=ParseMode.HTML)
+                                      parse_mode=ParseMode.HTML, reply_markup=back_to_menu())
         except Exception:
             pass
     elif action == "ok":
@@ -47,7 +54,7 @@ async def review_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await db.bump_stat(cfg.db_path, q.from_user.id, "approved")
         try:
             await q.edit_message_text((q.message.text_html if q.message else "") + "\n\n✅ <b>تایید شد؛ میره تو صف انتشار.</b>",
-                                      parse_mode=ParseMode.HTML)
+                                      parse_mode=ParseMode.HTML, reply_markup=back_to_menu())
         except Exception:
             pass
     elif action == "now":
@@ -60,10 +67,10 @@ async def review_router(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         try:
             await q.edit_message_text(
                 (q.message.text_html if q.message else "") + f"\n\n{'✅ منتشر شد!' if ok else '❌ ' + detail}",
-                parse_mode=ParseMode.HTML)
+                parse_mode=ParseMode.HTML, reply_markup=back_to_menu())
         except Exception:
             pass
 
 
 def register(app: Application) -> None:
-    app.add_handler(CallbackQueryHandler(review_router, pattern=r"^rv:(ok|now|no):\d+$"))
+    app.add_handler(CallbackQueryHandler(review_router, pattern=r"^rv:(ok|now|no|later):\d+$"))
