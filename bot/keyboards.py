@@ -215,6 +215,36 @@ def login_code_kb(rid: int = 0) -> InlineKeyboardMarkup:
     ])
 
 
+def login_keypad_kb(digits: str = "", rid: int = 0) -> InlineKeyboardMarkup:
+    ok_label = f"✅ ورود ({digits})" if len(digits) >= 5 else "✅ ورود"
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("1", callback_data="login:d:1"),
+            InlineKeyboardButton("2", callback_data="login:d:2"),
+            InlineKeyboardButton("3", callback_data="login:d:3"),
+        ],
+        [
+            InlineKeyboardButton("4", callback_data="login:d:4"),
+            InlineKeyboardButton("5", callback_data="login:d:5"),
+            InlineKeyboardButton("6", callback_data="login:d:6"),
+        ],
+        [
+            InlineKeyboardButton("7", callback_data="login:d:7"),
+            InlineKeyboardButton("8", callback_data="login:d:8"),
+            InlineKeyboardButton("9", callback_data="login:d:9"),
+        ],
+        [
+            InlineKeyboardButton("⌫ پاک کردن", callback_data="login:d:del"),
+            InlineKeyboardButton("0", callback_data="login:d:0"),
+            InlineKeyboardButton(ok_label, callback_data="login:d:ok"),
+        ],
+        [
+            InlineKeyboardButton("🔄 ارسال مجدد کد", callback_data=f"login:resend:{rid}"),
+            InlineKeyboardButton("❌ انصراف", callback_data="conv:cancel"),
+        ],
+    ])
+
+
 def cancel_conv() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([[InlineKeyboardButton("❌ انصراف", callback_data="conv:cancel")]])
 

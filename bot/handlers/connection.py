@@ -8,10 +8,24 @@ from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
                           ContextTypes, ConversationHandler, MessageHandler, filters)
 
 from .. import database as db
-from ..keyboards import back_to_menu, cancel_conv, channel_list, conn_menu, login_code_kb
+from ..keyboards import back_to_menu, cancel_conv, channel_list, conn_menu, login_code_kb, login_keypad_kb
 from ..texts import ASK_REF_DEST, ASK_REF_SOURCE
 
 LOGIN_PHONE, LOGIN_CODE, LOGIN_2FA = range(3)
+
+
+def _format_code_prompt(digits: str = "") -> str:
+    slots = [digits[i] if i < len(digits) else "—" for i in range(5)]
+    display = "  ".join(slots)
+    return (
+        "📩 <b>کد تایید ۵ رقمی تلگرام</b>\n\n"
+        f"🔢 کد وارد شده: <code>[  {display}  ]</code>\n\n"
+        "⚠️ <b>خیلی مهم (چرا قبلاً می‌گفت کد سوخته؟):</b>\n"
+        "تلگرام برای امنیت، وقتی کد رو <b>مستقیم در چت تایپ کنی</b> اون رو فیشینگ تشخیص داده و فوراً باطل می‌کنه! (در اعلان تلگرام هم برات نوشته: <i>«کد قبلاً توسط حسابتان به اشتراک گذاشته شده بود»</i>).\n\n"
+        "👇 <b>راه‌حل قطعی:</b>\n"
+        "۱. کد رو با <b>دکمه‌های ماشین‌حسابی بالا</b> بزن (هیچ پیامی در چت ارسال نمی‌شه و تلگرام کد رو نمی‌سوزونه).\n"
+        "۲. یا اگه دستی تایپ می‌کنی حتماً بین رقم‌ها خط تیره بذار (مثال: <code>۵-۲-۹-۷-۵</code>)."
+    )
 ADD_REF = 10
 
 
@@ -91,18 +105,23 @@ async def login_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
 async def login_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     assert update.message and update.message.text
+    context.user_data["login_digits"] = ""
     tm = _tm(context)
     res = await tm.send_code(update.effective_user.id, update.message.text.strip())  # type: ignore
+    rid = tm.login_rid(update.effective_user.id)  # type: ignore
     if res == "already_sent":
         await update.message.reply_text(
-            "📩 کد همین یکی دو دقیقه پیش فرستاده شد! همون رو وارد کن (اگه چند تا کد داری، فقط آخری!) — اگه نیومده «🔄 ارسال مجدد کد» رو بزن.",
-            reply_markup=login_code_kb(tm.login_rid(update.effective_user.id)))  # type: ignore
+            "📩 <b>کد قبلاً فرستاده شده بود!</b>\n\n" + _format_code_prompt(""),
+            parse_mode=ParseMode.HTML,
+            reply_markup=login_keypad_kb("", rid))
         return LOGIN_CODE
     if res != "ok":
         await update.message.reply_text(f"❌ {res}", reply_markup=cancel_conv())
         return LOGIN_PHONE
-    await update.message.reply_text("📩 کد تایید تلگرام رو بفرست (همون که به اکانتت اومد؛ اگه چند تا اومد فقط آخری!):",
-                                    reply_markup=login_code_kb(tm.login_rid(update.effective_user.id)))  # type: ignore
+    await update.message.reply_text(
+        _format_code_prompt(""),
+        parse_mode=ParseMode.HTML,
+        reply_markup=login_keypad_kb("", rid))
     return LOGIN_CODE
 
 
@@ -119,11 +138,14 @@ async def login_resend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         return LOGIN_CODE
     res = await tm.resend_code(q.from_user.id)
     if res == "ok":
+        context.user_data["login_digits"] = ""
+        rid = tm.login_rid(q.from_user.id)
         await q.answer("کد جدید فرستاده شد ✅")
-        await q.edit_message_text("📩 کد جدید فرستاده شد! ⚠️ فقط آخرین کدی که به تلگرامت اومده معتبره — قبلی‌ها سوختن. سریع واردش کن:",
-                                  reply_markup=login_code_kb(tm.login_rid(q.from_user.id)))
+        await q.edit_message_text("📩 <b>کد جدید فرستاده شد!</b>\n\n" + _format_code_prompt(""),
+                                  parse_mode=ParseMode.HTML,
+                                  reply_markup=login_keypad_kb("", rid))
     elif res.startswith("fast:"):
-        await q.answer(f"کد همین چند لحظه پیش فرستاده شد! {res[5:]} ثانیه صبر کن و فقط آخرین کد رو وارد کن.", show_alert=True)
+        await q.answer(f"کد همین چند لحظه پیش فرستاده شد! {res[5:]} ثانیه صبر کن و با ماشین‌حساب بالا وارد کن.", show_alert=True)
     elif res.startswith("wait:"):
         await q.answer(f"کمی صبر کن! تلگرام گفته {res[5:]} ثانیه دیگه.", show_alert=True)
     elif res == "expired":
@@ -133,22 +155,101 @@ async def login_resend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     else:
         await q.answer("خطا!", show_alert=True)
         await q.edit_message_text(f"❌ {res[4:] if res.startswith('err:') else res}",
-                                  reply_markup=login_code_kb())
+                                  reply_markup=login_keypad_kb("", rid))
+    return LOGIN_CODE
+
+
+async def login_digit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    q = update.callback_query
+    assert q and q.data
+    action = q.data.split(":")[2]
+    digits = str(context.user_data.get("login_digits", ""))
+    tm = _tm(context)
+    rid = tm.login_rid(q.from_user.id)
+
+    if action == "del":
+        digits = digits[:-1]
+        context.user_data["login_digits"] = digits
+        await q.answer("حذف شد")
+        try:
+            await q.edit_message_text(
+                _format_code_prompt(digits),
+                parse_mode=ParseMode.HTML,
+                reply_markup=login_keypad_kb(digits, rid),
+            )
+        except Exception:
+            pass
+        return LOGIN_CODE
+
+    if action == "ok":
+        if len(digits) < 5:
+            await q.answer("کد ۵ رقمه! ارقام باقی‌مانده رو وارد کن.", show_alert=True)
+            return LOGIN_CODE
+    elif action in "0123456789":
+        if len(digits) >= 5:
+            await q.answer("۵ رقم پر شده! روی دکمه ورود بزن یا پاک کن.", show_alert=True)
+            return LOGIN_CODE
+        digits += action
+        context.user_data["login_digits"] = digits
+        await q.answer(action)
+        if len(digits) < 5:
+            try:
+                await q.edit_message_text(
+                    _format_code_prompt(digits),
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=login_keypad_kb(digits, rid),
+                )
+            except Exception:
+                pass
+            return LOGIN_CODE
+
+    # 5 digits reached (auto-submit or ok clicked)
+    try:
+        await q.edit_message_text(f"⏳ در حال بررسی کد <code>{digits}</code>...", parse_mode=ParseMode.HTML)
+    except Exception:
+        pass
+
+    res = await tm.submit_code(q.from_user.id, digits)
+    if res == "ok":
+        context.user_data.pop("login_digits", None)
+        await q.edit_message_text("✅ اکانت وصل شد! حالتت رفت روی «شخصی». حالا کانال مقصد و مبدا رو اضافه کن.",
+                                  reply_markup=conn_menu("personal", True))
+        return ConversationHandler.END
+    if res == "2fa":
+        context.user_data.pop("login_digits", None)
+        await q.edit_message_text("🔐 رمز دومرحله‌ای (پسورد ابری) رو بفرست:", reply_markup=cancel_conv())
+        return LOGIN_2FA
+
+    context.user_data["login_digits"] = ""
+    await q.edit_message_text(
+        f"❌ {res}\n\n" + _format_code_prompt(""),
+        parse_mode=ParseMode.HTML,
+        reply_markup=login_keypad_kb("", rid),
+    )
     return LOGIN_CODE
 
 
 async def login_code(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     assert update.message and update.message.text
+    raw = update.message.text.strip()
     tm = _tm(context)
-    res = await tm.submit_code(update.effective_user.id, update.message.text.strip())  # type: ignore
+    rid = tm.login_rid(update.effective_user.id)  # type: ignore
+    res = await tm.submit_code(update.effective_user.id, raw)  # type: ignore
     if res == "ok":
+        context.user_data.pop("login_digits", None)
         await update.message.reply_text("✅ اکانت وصل شد! حالتت رفت روی «شخصی». حالا کانال مقصد و مبدا رو اضافه کن.",
                                         reply_markup=conn_menu("personal", True))
         return ConversationHandler.END
     if res == "2fa":
+        context.user_data.pop("login_digits", None)
         await update.message.reply_text("🔐 رمز دومرحله‌ای (پسورد ابری) رو بفرست:", reply_markup=cancel_conv())
         return LOGIN_2FA
-    await update.message.reply_text(f"❌ {res}", reply_markup=login_code_kb())
+    context.user_data["login_digits"] = ""
+    await update.message.reply_text(
+        f"❌ {res}\n\n" + _format_code_prompt(""),
+        parse_mode=ParseMode.HTML,
+        reply_markup=login_keypad_kb("", rid),
+    )
     return LOGIN_CODE
 
 
@@ -237,6 +338,8 @@ async def chadd_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 async def conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data.pop("login_digits", None)
+    context.user_data.pop("chadd_kind", None)
     q = update.callback_query
     if q:
         await q.answer()
@@ -288,8 +391,9 @@ def register(app: Application) -> None:
     app.add_handler(ConversationHandler(
         entry_points=[CallbackQueryHandler(login_start, pattern=r"^cn:login$")],
         states={LOGIN_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_phone)],
-                LOGIN_CODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_code),
-                             CallbackQueryHandler(login_resend, pattern=r"^login:resend(?::\\d+)?$")],
+                LOGIN_CODE: [CallbackQueryHandler(login_digit, pattern=r"^login:d:"),
+                             CallbackQueryHandler(login_resend, pattern=r"^login:resend(?::\\d+)?$"),
+                             MessageHandler(filters.TEXT & ~filters.COMMAND, login_code)],
                 LOGIN_2FA: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_2fa)]},
         fallbacks=[CallbackQueryHandler(conv_cancel, pattern=r"^conv:cancel$"),
                    CommandHandler("cancel", conv_cancel)],
