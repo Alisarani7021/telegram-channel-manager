@@ -208,9 +208,9 @@ def provider_pick() -> InlineKeyboardMarkup:
     ])
 
 
-def login_code_kb() -> InlineKeyboardMarkup:
+def login_code_kb(rid: int = 0) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔄 ارسال مجدد کد", callback_data="login:resend")],
+        [InlineKeyboardButton("🔄 ارسال مجدد کد", callback_data=f"login:resend:{rid}")],
         [InlineKeyboardButton("❌ انصراف", callback_data="conv:cancel")],
     ])
 

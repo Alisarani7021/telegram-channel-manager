@@ -37,7 +37,8 @@ class TManager:
         self.parser_session_str = parser_session
         self.parser: TelegramClient | None = None
         self.users: dict[int, TelegramClient] = {}
-        self.login_state: dict[int, dict] = {}  # user_id -> {client, phone, hash}
+        self.login_state: dict[int, dict] = {}  # user_id -> {client, phone, hash, ts, rid}
+        self._rid = 0
 
     # ---------- startup ----------
     async def start(self) -> None:
@@ -113,8 +114,10 @@ class TManager:
             return f"تلگرام محدودت کرده، {e.seconds} ثانیه بعد دوباره تلاش کن."
         except Exception as e:
             return f"خطا: {e}"
+        self._rid += 1
         self.login_state[user_id] = {"client": cli, "phone": phone.strip(),
-                                     "hash": sent.phone_code_hash, "ts": time.time()}
+                                     "hash": sent.phone_code_hash, "ts": time.time(),
+                                     "rid": self._rid}
         return "ok"
 
     async def submit_code(self, user_id: int, code: str) -> str:
@@ -132,8 +135,8 @@ class TManager:
         except errors.PhoneCodeInvalidError:
             return "کد اشتباهه! دقیقاً همون ۵ رقمی که تلگرام فرستاد رو بفرست."
         except errors.PhoneCodeExpiredError:
-            return ("⏰ این کد سوخته/منقضی شده! (هر کد فقط چند دقیقه اعتبار داره و با درخواست کد جدید، قبلی می‌سوزه.)\n"
-                    "دکمه «🔄 ارسال مجدد کد» رو بزن و کد جدید رو سریع وارد کن.")
+            return ("⏰ این کد سوخته/منقضی شده! (فقط آخرین کد معتبره — اگه چند تا کد پشت سر هم گرفتی، فقط آخری رو وارد کن.)\n"
+                    "اگه کد جدیدی نیومده، دکمه «🔄 ارسال مجدد کد» رو بزن و سریع واردش کن.")
         except errors.FloodWaitError as e:
             return f"تلگرام محدودت کرده، {e.seconds} ثانیه بعد دوباره تلاش کن."
         except Exception as e:
@@ -141,10 +144,18 @@ class TManager:
         await self._save_session(user_id, cli)
         return "ok"
 
+    def login_rid(self, user_id: int) -> int:
+        st = self.login_state.get(user_id)
+        return int(st.get("rid", 0)) if st else 0
+
     async def resend_code(self, user_id: int) -> str:
         st = self.login_state.get(user_id)
         if not st:
             return "expired"
+        # throttle: mashing resend burns the code the user is about to enter
+        age = time.time() - st.get("ts", 0)
+        if age < 60:
+            return f"fast:{int(60 - age)}"
         cli = st["client"]
         try:
             if not cli.is_connected():
@@ -156,6 +167,8 @@ class TManager:
             return f"err:{e}"
         st["hash"] = sent.phone_code_hash
         st["ts"] = time.time()
+        self._rid += 1
+        st["rid"] = self._rid
         return "ok"
 
     async def submit_2fa(self, user_id: int, password: str) -> str:

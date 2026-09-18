@@ -95,25 +95,35 @@ async def login_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     res = await tm.send_code(update.effective_user.id, update.message.text.strip())  # type: ignore
     if res == "already_sent":
         await update.message.reply_text(
-            "📩 کد همین یکی دو دقیقه پیش فرستاده شد! همون رو وارد کن — اگه نیومده «🔄 ارسال مجدد کد» رو بزن.",
-            reply_markup=login_code_kb())
+            "📩 کد همین یکی دو دقیقه پیش فرستاده شد! همون رو وارد کن (اگه چند تا کد داری، فقط آخری!) — اگه نیومده «🔄 ارسال مجدد کد» رو بزن.",
+            reply_markup=login_code_kb(tm.login_rid(update.effective_user.id)))  # type: ignore
         return LOGIN_CODE
     if res != "ok":
         await update.message.reply_text(f"❌ {res}", reply_markup=cancel_conv())
         return LOGIN_PHONE
-    await update.message.reply_text("📩 کد تایید تلگرام رو بفرست (همون که به اکانتت اومد):",
-                                    reply_markup=login_code_kb())
+    await update.message.reply_text("📩 کد تایید تلگرام رو بفرست (همون که به اکانتت اومد؛ اگه چند تا اومد فقط آخری!):",
+                                    reply_markup=login_code_kb(tm.login_rid(update.effective_user.id)))  # type: ignore
     return LOGIN_CODE
 
 
 async def login_resend(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     q = update.callback_query
-    assert q
-    res = await _tm(context).resend_code(q.from_user.id)
+    assert q and q.data
+    tm = _tm(context)
+    try:
+        rid = int(q.data.split(":")[2])
+    except (IndexError, ValueError):
+        rid = 0
+    if tm.login_rid(q.from_user.id) != rid:
+        await q.answer("این دکمه قدیمیه! فقط از آخرین پیام «ارسال مجدد» استفاده کن.", show_alert=True)
+        return LOGIN_CODE
+    res = await tm.resend_code(q.from_user.id)
     if res == "ok":
         await q.answer("کد جدید فرستاده شد ✅")
-        await q.edit_message_text("📩 کد جدید فرستاده شد! سریع واردش کن:",
-                                  reply_markup=login_code_kb())
+        await q.edit_message_text("📩 کد جدید فرستاده شد! ⚠️ فقط آخرین کدی که به تلگرامت اومده معتبره — قبلی‌ها سوختن. سریع واردش کن:",
+                                  reply_markup=login_code_kb(tm.login_rid(q.from_user.id)))
+    elif res.startswith("fast:"):
+        await q.answer(f"کد همین چند لحظه پیش فرستاده شد! {res[5:]} ثانیه صبر کن و فقط آخرین کد رو وارد کن.", show_alert=True)
     elif res.startswith("wait:"):
         await q.answer(f"کمی صبر کن! تلگرام گفته {res[5:]} ثانیه دیگه.", show_alert=True)
     elif res == "expired":
@@ -279,7 +289,7 @@ def register(app: Application) -> None:
         entry_points=[CallbackQueryHandler(login_start, pattern=r"^cn:login$")],
         states={LOGIN_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_phone)],
                 LOGIN_CODE: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_code),
-                             CallbackQueryHandler(login_resend, pattern=r"^login:resend$")],
+                             CallbackQueryHandler(login_resend, pattern=r"^login:resend(?::\\d+)?$")],
                 LOGIN_2FA: [MessageHandler(filters.TEXT & ~filters.COMMAND, login_2fa)]},
         fallbacks=[CallbackQueryHandler(conv_cancel, pattern=r"^conv:cancel$"),
                    CommandHandler("cancel", conv_cancel)],
